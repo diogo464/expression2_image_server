@@ -8,7 +8,7 @@ fi
 
 cargo build --release
 cp ../target/release/expression2_image_server .
-cp -r ../images images
+cp -r ../images images/
 heroku container:login
 heroku container:push web -a $APP
 heroku container:release web -a $APP

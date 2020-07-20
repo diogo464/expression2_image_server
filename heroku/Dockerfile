@@ -7,5 +7,6 @@ USER server
 WORKDIR /home/server
 COPY expression2_image_server e2server
 COPY entry.sh entry.sh
+COPY images images
 
 ENTRYPOINT ["./entry.sh"]
