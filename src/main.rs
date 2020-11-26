@@ -17,7 +17,7 @@ struct Params {
     #[clap(long = "ipaddr", default_value = "0.0.0.0")]
     bind_ipaddr: String,
     /// The port the http server should listen on
-    #[clap(short = "p", long = "port", default_value = "8080")]
+    #[clap(short = 'p', long = "port", default_value = "8080")]
     bind_port: u16,
 }
 
@@ -52,7 +52,7 @@ mod handlers {
 
     fn image_to_expression2_format(img: &image::DynamicImage, width: u32, height: u32) -> Vec<u8> {
         let resized = img.resize_exact(width, height, image::imageops::FilterType::Nearest);
-        let buffer = resized.to_rgb();
+        let buffer = resized.to_rgb8();
         let mut data =
             Vec::<u8>::with_capacity((buffer.width() * buffer.height() * 3 + 12) as usize);
         data.extend_from_slice(format!("{}x{};", buffer.width(), buffer.height()).as_bytes());
