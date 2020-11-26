@@ -1,1 +1,0 @@
-./e2server -p $PORT
