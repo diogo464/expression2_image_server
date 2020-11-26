@@ -1,4 +1,4 @@
-FROM ekidd/rust-musl-builder as builder
+FROM rust:1.48.0 as builder
 
 RUN mkdir expression2_image_server
 WORKDIR expression2_image_server
@@ -6,19 +6,16 @@ RUN mkdir src
 ADD src/ src/
 COPY ./Cargo.toml ./
 
+RUN rustup default nightly
 RUN cargo build --release
 
-FROM alpine:latest
+FROM fedora:33
 
 EXPOSE 8080
 
-RUN apk update \
-    && apk add --no-cache ca-certificates tzdata \
-    && rm -rf /var/cache/apk/*
-
-RUN adduser -D server
+RUN useradd -m server
 WORKDIR /home/server
-COPY --from=builder /home/rust/src/expression2_image_server/target/x86_64-unknown-linux-musl/release/expression2_image_server e2server
+COPY --from=builder /expression2_image_server/target/release/expression2_image_server e2server
 COPY images images
 RUN chown -R server:server .
 USER server
