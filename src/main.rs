@@ -1,25 +1,29 @@
-#![feature(proc_macro_hygiene, decl_macro)]
-#[macro_use]
-extern crate rocket;
+use axum::{
+    extract::{Path, Query},
+    http::StatusCode,
+    response::IntoResponse,
+    routing::get,
+    Router,
+};
 use bytes::BytesMut;
-use clap::Clap;
+use clap::Parser;
+use futures::StreamExt;
 use image;
 use percent_encoding;
 use reqwest;
-use rocket::request::Form;
-use std::path::Path;
+use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use thiserror::Error;
-use tokio::stream::StreamExt;
 
-#[derive(Clap)]
-#[clap(version = "1.0", author = "diogo464")]
+#[derive(Parser)]
+#[clap(version = "0.2.0", author = "diogo464")]
 struct Params {
     /// The address the http server should bind to
-    #[clap(long = "ipaddr", default_value = "0.0.0.0")]
-    bind_ipaddr: String,
+    #[clap(long, default_value = "0.0.0.0")]
+    address: String,
     /// The port the http server should listen on
-    #[clap(short = 'p', long = "port", default_value = "8080")]
-    bind_port: u16,
+    #[clap(short, long, default_value = "8080")]
+    port: u16,
 }
 
 static IMAGES_PATH: &str = "images";
@@ -40,36 +44,38 @@ pub enum Error {
     InternalError(Box<dyn std::error::Error + Send>),
 }
 
-pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-impl<'r, 'o: 'r> rocket::response::Responder<'r, 'o> for Error {
-    fn respond_to(self, _request: &'r rocket::request::Request) -> rocket::response::Result<'o> {
-        use rocket::http::{ContentType, Status};
-        use rocket::response::Response;
-        use std::io::Cursor;
-
-        let status = match &self {
-            Self::InvalidURL => Status::BadRequest,
-            Self::RequestTimeOut => Status::BadRequest,
-            Self::ImageDoesntExist => Status::BadRequest,
-            Self::RequestedImageToLarge => Status::BadRequest,
-            Self::InvalidImage => Status::BadRequest,
-            Self::InternalError(e) => {
-                eprintln!("Internal error : {:#?}", e);
-                Status::InternalServerError
-            }
-        };
-
-        let msg = self.to_string();
-        Response::build()
-            .status(status)
-            .header(ContentType::Plain)
-            .sized_body(msg.len(), Cursor::new(msg))
-            .ok()
+impl IntoResponse for Error {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            Error::InvalidURL => (StatusCode::BAD_REQUEST, "Invalid URL".to_string()),
+            Error::RequestTimeOut => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Request to remote server timed out".to_string(),
+            ),
+            Error::ImageDoesntExist => (
+                StatusCode::NOT_FOUND,
+                "The requested image doesnt exist".to_string(),
+            ),
+            Error::RequestedImageToLarge => (
+                StatusCode::BAD_REQUEST,
+                "Requested image is to large".to_string(),
+            ),
+            Error::InvalidImage => (
+                StatusCode::BAD_REQUEST,
+                "The requested image was invalid".to_string(),
+            ),
+            Error::InternalError(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Internal error: {e}"),
+            ),
+        }
+        .into_response()
     }
 }
 
-#[derive(Debug, FromForm)]
+pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ImageQuery {
     width: Option<u32>,
     height: Option<u32>,
@@ -94,11 +100,37 @@ fn image_to_expression2_format(img: &image::DynamicImage, width: u32, height: u3
     data
 }
 
-#[get("/custom/<url>?<query..>")]
-async fn custom_image(url: String, query: Form<ImageQuery>) -> Result<Vec<u8>> {
+#[axum::debug_handler]
+async fn local_image(
+    Path(filename): Path<String>,
+    Query(query): Query<ImageQuery>,
+) -> Result<Vec<u8>> {
+    let (width, height) = query.width_height();
+    log::info!(
+        "Requesting image {} with size {}x{}",
+        filename,
+        width,
+        height
+    );
+
+    let img = image::open(std::path::Path::new(IMAGES_PATH).join(filename.as_str()))
+        .map_err(|_| Error::ImageDoesntExist)?;
+    let expression2_data = image_to_expression2_format(&img, width, height);
+
+    Ok(expression2_data)
+}
+
+#[axum::debug_handler]
+async fn custom_image(Path(url): Path<String>, Query(query): Query<ImageQuery>) -> Result<Vec<u8>> {
     const MAX_IMAGE_SIZE: u64 = 1024 * 1024 * 16; //16MB
 
     let (width, height) = query.width_height();
+    log::info!(
+        "Requesting image from {} with size {}x{}",
+        url,
+        width,
+        height
+    );
 
     let url = String::from(
         percent_encoding::percent_decode_str(&url)
@@ -133,25 +165,29 @@ async fn custom_image(url: String, query: Form<ImageQuery>) -> Result<Vec<u8>> {
     Ok(expression2_data)
 }
 
-#[get("/image/<filename>?<query..>")]
-fn local_image(filename: String, query: Form<ImageQuery>) -> Result<Vec<u8>> {
-    let (width, height) = query.width_height();
-    let img = image::open(Path::new(IMAGES_PATH).join(filename.as_str()))
-        .map_err(|_| Error::ImageDoesntExist)?;
-    let expression2_data = image_to_expression2_format(&img, width, height);
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    let args = Params::parse();
 
-    Ok(expression2_data)
-}
+    // build our application with a single route
+    let app = Router::new()
+        .route("/image/:url", get(local_image))
+        .route("/custom/:url", get(custom_image));
 
-#[launch]
-fn rocket() -> rocket::Rocket {
-    use rocket::config::Config;
+    tokio::spawn(async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install CTRL+C signal handler");
+        std::process::exit(0);
+    });
 
-    let params = Params::parse();
-    let config = Config {
-        address: params.bind_ipaddr.parse().expect("Invalid bind address"),
-        port: params.bind_port,
-        ..Config::debug_default()
-    };
-    rocket::custom(config).mount("/", routes![custom_image, local_image])
+    let addr = format!("{}:{}", args.address, args.port).parse::<SocketAddr>()?;
+    log::info!("Listening on {}", addr);
+    axum::Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+
+    Ok(())
 }

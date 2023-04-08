@@ -1,19 +1,21 @@
 [package]
 name = "expression2_image_server"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["diogo <diogo464@protonmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-#rocket = "0.4.6"
-rocket = { git = "https://github.com/SergioBenitez/Rocket" , rev = "1f1f44f336e5a172361fc1860461bb03667b1ed2" }
-tokio = { version = "0.3.4", features = ["stream"] }
-bytes = "0.6.0"
-image = "0.23.12"
-serde = { version = "1.0.117", features = ["derive"] }
-reqwest = { version = "0.10.9", features = ["stream"] }
-clap = "3.0.0-beta.2"
+tokio = { version = "1.27.0", features = ["full"] }
+bytes = "1.4.0"
+image = "0.24.6"
+serde = { version = "1", features = ["derive"] }
+reqwest = { version = "0.11.16", features = ["stream"] }
+clap = { version = "4.2.1", features = ["derive"] }
 percent-encoding = "2.1.0"
-thiserror = "1.0.22"
+thiserror = "1"
+axum = { version = "0.6.12", features = ["macros"] }
+futures = "0.3.28"
+env_logger = "0.10.0"
+log = "0.4.17"
