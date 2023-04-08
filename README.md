@@ -28,7 +28,7 @@ Encodes one of the images already present in the server and returns back its enc
 
 if(first())
 {
-    HOST = "<insert host here>"
+    HOST = "https://expression2-image-server.d464.sh"
     IMAGE_URL = "https://cdna.artstation.com/p/assets/images/images/016/364/098/4k/beeple-02-27-19.jpg"
     
     function table writeImageToDigiscreen(State:table, Screen:wirelink, ImageData:string) {
