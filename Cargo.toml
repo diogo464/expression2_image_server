@@ -11,7 +11,7 @@ tokio = { version = "1.28.1", features = ["full"] }
 bytes = "1.4.0"
 image = "0.24.6"
 serde = { version = "1", features = ["derive"] }
-reqwest = { version = "0.11.16", features = ["stream"] }
+reqwest = { version = "0.11.18", features = ["stream"] }
 clap = { version = "4.2.7", features = ["derive"] }
 percent-encoding = "2.2.0"
 thiserror = "1"
