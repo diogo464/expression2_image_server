@@ -1,4 +1,4 @@
-FROM docker.io/rust:1.70.0 as builder
+FROM docker.io/rust:1.84.0 as builder
 
 RUN mkdir expression2_image_server
 WORKDIR expression2_image_server
